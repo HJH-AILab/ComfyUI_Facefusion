@@ -72,8 +72,6 @@ class FacefusionFaceSwapperProcessor:
     FUNCTION = "run"
     CATEGORY = GLOBAL_CATEGORY
 
-    OUTPUT_NODE = True
-
     def run(self, options, model, pixel_boost):
         for key, value in options.items():
             if value == 'none':
@@ -119,8 +117,6 @@ class FacefusionFrameEnhancerProcessor:
     RETURN_NAMES = ("frame_enhancer_processor",)
     FUNCTION = "run"
     CATEGORY = GLOBAL_CATEGORY
-
-    OUTPUT_NODE = True
 
     def run(self, options, model, frame_enhancer_blend):
         for key, value in options.items():
@@ -175,8 +171,6 @@ class FacefusionFaceEnhancerProcessor:
     FUNCTION = "run"
     CATEGORY = GLOBAL_CATEGORY
 
-    OUTPUT_NODE = True
-
     def run(self,options, model, face_enhancer_blend, face_enhancer_weight):
         for key, value in options.items():
             if value == 'none':
@@ -218,8 +212,6 @@ class FacefusionLipSyncerProcessor:
     RETURN_NAMES = ("lip_syncer_processor",)
     FUNCTION = "run"
     CATEGORY = GLOBAL_CATEGORY
-
-    OUTPUT_NODE = True
 
     def run(self,options, model,):
         for key, value in options.items():
@@ -320,8 +312,6 @@ class FacefusionOptionsNode:
     FUNCTION = "run"
     CATEGORY = GLOBAL_CATEGORY
 
-    OUTPUT_NODE = True
-
     def run(self, **options):
         # 清理用于分隔选项类型的值
         options = {k: v for k, v in options.items() if not k.startswith('hr_')}
@@ -410,8 +400,6 @@ class FacefusionProcesserOptionsNode:
     RETURN_NAMES = ("processer_options",)
     FUNCTION = "run"
     CATEGORY = GLOBAL_CATEGORY
-
-    OUTPUT_NODE = True
 
     def run(self, **options):
         download_site = options.pop('download_site')
