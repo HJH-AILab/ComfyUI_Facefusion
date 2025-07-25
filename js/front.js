@@ -5,12 +5,27 @@ import { api } from "../../scripts/api.js";
 app.registerExtension({ 
     name: "hjh.facefusion.nodes",
     async setup() {
-        const resp = await api.fetchApi("/get_facefusion_combo_set");
+        const resp = await api.fetchApi("/hjh/get_facefusion_combo_set");
+        
+        let data = new FormData()
+        data.append("type","image")
+        data.append("cur_dir","")
+    
+        let abc = await api.fetchApi("/hjh/facefusion/get_file_list",{
+            method: "POST",
+            body:data
+        });
+        console.log(await abc.json());
+
         app.FACEFUSION_COMBO_SET = await resp.json();
     },
     // async nodeCreated(node) {
     // },
     loadedGraphNode(node){
+        if(node.comfyClass == "FacefusionProcessingNode"){
+        //    debugger;
+        }
+
         // 设置不同换脸模型可用参数
         if(node.comfyClass == "FacefusionFaceSwapperProcessor"){
             node.widgets[0].callback=(value, widget, node)=>{
