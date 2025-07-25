@@ -1,6 +1,9 @@
+from ast import Not
 import os
 import sys
 import torch
+
+import folder_paths
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(ROOT_DIR)
@@ -20,8 +23,8 @@ import facefusion.choices as CHOICES_SET
 from facefusion.processors import choices as PROCESSOR_CHOICES_SET
 
 
-HF_URL = CHOICES_SET.download_provider_set["huggingface"]["path"][0]
-HF_M_URL = CHOICES_SET.download_provider_set["huggingface"]["path"][1]
+HF_URL = CHOICES_SET.download_provider_set["huggingface"]["urls"][0]
+HF_M_URL = CHOICES_SET.download_provider_set["huggingface"]["urls"][1]
 def init_facefusion_state_manager():
     facefusion.ROOT_DIR = f"{ROOT_DIR}/facefusion"
 
@@ -241,6 +244,9 @@ class FacefusionOptionsNode:
         requied_options = {
             "log_level":(CHOICES_SET.log_levels, {"default":CHOICES_SET.log_levels[0]}),
             "hr_1":("STRING",{"default":""}),
+            "download_site":(["github","huggingface","hf-mirror"], {"default":"github"}),
+            "skip_hash_check":(list(reversed(BOOL_SET)), {}),
+            "hr_2":("STRING",{"default":""}),
 
             "face_selector_mode": (CHOICES_SET.face_selector_modes, {"default":"reference"}), # 选择人脸模式
             "face_selector_orders":(CHOICES_SET.face_selector_orders, {"default":"best-worst"}),# 选择人脸顺序
@@ -251,11 +257,11 @@ class FacefusionOptionsNode:
             "reference_face_index":("INT",{"default":0,}), # 参考脸序号,
             "reference_face_distance":("FLOAT", {"default":0.6,"min":0.0,"max":1.5,"step":0.05,"display":"slider"}), # 参考脸距离
             "reference_frame_number":("INT",{"default":0,}), # 参考帧序号
-            "hr_2":("STRING",{"default":""}),
+            "hr_3":("STRING",{"default":""}),
 
             "face_occluder_model":(CHOICES_SET.face_occluder_models, {"default":"xseg_1"}), # 遮挡人脸模型
             "face_parser_model":(CHOICES_SET.face_parser_models, {"default":"bisenet_resnet_34"}), # 人脸解析模型
-            "hr_3":("STRING",{"default":""}),
+            "hr_4":("STRING",{"default":""}),
 
             # "face_mask_types":(CHOICES_SET.face_mask_types, {"default":"box"}), # 人脸蒙版类型
             "use_face_box_mask": (BOOL_SET, ), # 是否使用人脸蒙版
@@ -265,10 +271,10 @@ class FacefusionOptionsNode:
             "face_mask_padding_right":("INT", {"default":0,"min":0,"max":100,"step":1,"display":"slider"}), # 人脸蒙版右边距
             "face_mask_padding_bottom":("INT", {"default":0,"min":0,"max":100,"step":1,"display":"slider"}), # 人脸蒙版下边距
             "face_mask_padding_left":("INT", {"default":0,"min":0,"max":100,"step":1,"display":"slider"}), # 人脸蒙版左边距
-            "hr_4":("STRING",{"default":""}),
+            "hr_5":("STRING",{"default":""}),
 
             "use_face_occlusion_mask": (list(reversed(BOOL_SET)),), # 是否使用人脸蒙版
-            "hr_5":("STRING",{"default":""}),
+            "hr_6":("STRING",{"default":""}),
 
             "use_face_region_mask": (list(reversed(BOOL_SET)),), # 是否使用人脸蒙版
             # face_region属性
@@ -282,7 +288,7 @@ class FacefusionOptionsNode:
             "face_region_mouth":(BOOL_SET, ), # 嘴巴区域
             "face_region_upper_lip":(BOOL_SET, ), # 上唇区域
             "face_region_lower_lip":(BOOL_SET, ), # 下唇区域
-            "hr_6":("STRING",{"default":""}),
+            "hr_7":("STRING",{"default":""}),
             
             "face_detector_model":(CHOICES_SET.face_detector_models, {"default":DEFAULT_SET["face_detector"]}), # 人脸检测模型
             "face_detector_size":(CHOICES_SET.face_detector_set[DEFAULT_SET["face_detector"]],), # 人脸检测尺寸
@@ -316,6 +322,15 @@ class FacefusionOptionsNode:
         # 清理用于分隔选项类型的值
         options = {k: v for k, v in options.items() if not k.startswith('hr_')}
 
+        download_site = options.pop('download_site')
+        if(download_site == "huggingface"):
+            options["download_providers"] = [download_site]
+            CHOICES_SET.download_provider_set["huggingface"]["urls"] = [HF_URL]
+        elif(download_site == "hf-mirror"):
+            options["download_providers"] = ["huggingface"]
+            CHOICES_SET.download_provider_set["huggingface"]["urls"] = [HF_M_URL]
+        else:
+            options["download_providers"] = [download_site]
         # 将显示为face_index的值存为position
         state_manager.set_item('reference_face_position',options.pop('reference_face_index'))
 
@@ -431,8 +446,8 @@ class FacefusionProcessingNode:
         """定义输入参数"""
         return {
             "required": {
-                "source_image_path":("STRING", {"default":"","lazy":True}),
-                "source_audio_path":("STRING", {"default":"","lazy":True}),
+                "source_image_path":("STRING", {"default":"","lazy":True,"data-metadata":"image"}),
+                "source_audio_path":("STRING", {"default":"","lazy":True,"data-metadata":"audio"}),
                 "target_path":("STRING", {"default":""}),
                 "options":("FFOPTIONS", {}),
                 "output_path":("STRING", {"default":""}),
@@ -449,6 +464,9 @@ class FacefusionProcessingNode:
                 "lip_syncer":("FFLIPSYNCERPROCESSOR",),
                 "face_enhancer":("FFFACEENHANCERPROCESSOR",),
                 "frame_enhancer":("FFFRAMEENHANCERPROCESSOR",),
+            },
+            "hidden":{
+                "test":("STRING", {"default":"1"})
             }
         }
     
@@ -460,17 +478,20 @@ class FacefusionProcessingNode:
     OUTPUT_NODE = True
 
     def run(self,source_image_path,source_audio_path,target_path, options, output_path, output_width, output_height, output_image_quality, output_audio_encoder, output_video_encoder,output_video_preset,output_video_quality,**processors):
+        input_root = folder_paths.get_input_directory()
 
         sources = []
         if source_image_path != "":
             source_image_path = source_image_path.strip('"')
-            sources.append(source_image_path)
+            sources.append(os.path.join(input_root, source_image_path))
         if source_audio_path != "":
             source_audio_path = source_audio_path.strip('"')
-            sources.append(source_audio_path)
+            sources.append(os.path.join(input_root, source_audio_path))
 
         target_path = target_path.strip('"')
+        target_path = os.path.join(input_root, target_path)
         output_path = output_path.strip('"')
+        output_path = os.path.join(input_root, output_path)
 
         state_manager.set_item('source_paths', sources)
         state_manager.set_item('target_path', target_path)
@@ -507,13 +528,52 @@ class FacefusionProcessingNode:
 from aiohttp import web
 from server import PromptServer
 
-@PromptServer.instance.routes.get("/get_facefusion_combo_set")
-async def get_hello(request):
+@PromptServer.instance.routes.get("/hjh/get_facefusion_combo_set")
+async def get_facefusion_combo_set(request):
     combo_set = {
         "face_swapper_models":PROCESSOR_CHOICES_SET.face_swapper_set,
         "face_detector_set":CHOICES_SET.face_detector_set,
     }
     return web.json_response(combo_set)
+
+from .utils.extnames import check_type
+@PromptServer.instance.routes.post("/hjh/facefusion/get_file_list")
+async def facefusion_get_file_list(request):
+    list = []
+    input_root = folder_paths.get_input_directory()
+    POST = await request.post() 
+    cur_dir = POST.get('cur_dir')
+    type = POST.get('type')
+    if cur_dir == "":
+        cur_dir = input_root
+    else:
+        cur_dir = os.path.join(input_root, cur_dir) 
+
+    if os.path.exists(cur_dir) == False:
+        return web.json_response([])
+
+    # 遍历文件夹
+    for file in os.listdir(cur_dir):
+        file_path = os.path.join(cur_dir, file)
+        path = file_path.replace(input_root,"").replace("\\","/")
+        if path.startswith("//") is False:
+            path = path.lstrip("/")
+
+        if os.path.isdir(file_path):
+            list.append({
+                "name":file,
+                "type":"folder",
+                "path": path 
+            })
+        else:
+            if check_type(file, type):
+                list.append({
+                    "name":file,
+                    "type":"file",
+                    "path":path,
+                })
+    # print(list)
+    return web.json_response(list)
 
 WEB_DIRECTORY = "./js"
 
